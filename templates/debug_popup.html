@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>디버그 콘솔</title>
+    <link rel="stylesheet" href="/static/styles.css"> <!-- Main styles (adjust path if needed) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        /* Styles specifically for the popup window */
+        body {
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 0; /* Remove padding for full height */
+            background-color: #1e1e1e; /* Dark theme background */
+            color: #d4d4d4;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .debug-panel {
+            display: flex;
+            flex-direction: column;
+            flex: 1; /* Fill available height */
+            padding: 15px;
+            overflow: hidden; /* Prevent body scroll */
+        }
+
+        /* --- Styles migrated from index.html --- */
+        .debug-header {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .debug-header h3 {
+            margin: 0;
+            font-size: 16px;
+            color: #fff;
+        }
+        .debug-controls {
+            display: flex;
+            gap: 8px;
+        }
+        .debug-controls button {
+            padding: 4px 8px; background: #333; border: none; border-radius: 4px;
+            color: #fff; cursor: pointer; font-size: 12px;
+        }
+        .debug-controls button:hover { background: #444; }
+
+        .debug-content {
+            flex: 1; /* Take remaining vertical space */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Contain children */
+            background: #2d2d2d;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .debug-tabs {
+            display: flex;
+            gap: 5px; /* Reduced gap */
+            margin-bottom: 10px;
+            flex-shrink: 0; /* Prevent tabs from shrinking */
+        }
+        .tab-button {
+            padding: 5px 10px;
+            border: 1px solid #555;
+            background: #333;
+            color: #ccc;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0; /* Rounded top corners */
+            border-bottom: none;
+            font-size: 11px;
+        }
+        .tab-button.active {
+            background: #2d2d2d; /* Match content background */
+            color: #fff;
+            border-color: #555;
+            border-bottom: 1px solid #2d2d2d; /* Hide bottom border */
+            position: relative;
+            top: 1px; /* Align with content area */
+        }
+
+        .debug-tab {
+            display: none; /* Hidden by default */
+            flex: 1; /* Fill remaining space */
+            overflow-y: auto; /* Scroll content */
+            background-color: #2d2d2d;
+            border: 1px solid #555; /* Border for content */
+            border-top: none; /* Remove top border */
+            padding: 10px;
+            border-radius: 0 0 4px 4px;
+            margin-top: -1px; /* Overlap with active tab bottom */
+        }
+        .debug-tab.active {
+            display: block; /* Show active tab */
+        }
+
+        /* Log Entry Styles */
+        .log-entry, .debug-entry, .llm-log-entry {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            background: #252525;
+            border-left: 3px solid transparent; /* For level indication */
+        }
+        .log-entry:last-child, .debug-entry:last-child, .llm-log-entry:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Timestamp */
+        .log-timestamp, .debug-timestamp, .llm-log-timestamp {
+            color: #888;
+            font-size: 10px;
+            margin-right: 8px;
+            display: block; /* Put timestamp on its own line */
+            margin-bottom: 4px;
+        }
+
+        /* Communication Log Specific */
+        .debug-method {
+            display: inline-block; padding: 2px 6px; border-radius: 3px;
+            font-weight: bold; margin-right: 5px; font-size: 10px;
+        }
+        .debug-method.get { background: #4CAF50; color: #fff; }
+        .debug-method.post { background: #2196F3; color: #fff; }
+        .debug-method.delete { background: #f44336; color: #fff; }
+        .debug-url { color: #9cdcfe; word-break: break-all; font-size: 11px; }
+        .debug-request-container details, .debug-response-container details {
+            margin-top: 5px;
+        }
+        .debug-request-container summary, .debug-response-container summary {
+            cursor: pointer;
+            font-size: 10px;
+            color: #aaa;
+        }
+        .debug-request, .debug-response {
+            margin-top: 5px; padding: 8px; background: #1e1e1e;
+            border-radius: 4px; white-space: pre-wrap; color: #d4d4d4;
+            max-height: 200px; overflow-y: auto; /* Scroll long req/res */
+        }
+        .debug-error { color: #f44336; margin-top: 5px; font-weight: bold;}
+
+        /* General Log Specific */
+        .log-level {
+            display: inline-block; padding: 1px 5px; border-radius: 3px;
+            font-weight: bold; margin-right: 5px; font-size: 10px;
+            text-transform: uppercase;
+        }
+        .log-level.info, .log-entry.info .log-level { background: #2196F3; color: #fff; border-left-color: #2196F3; }
+        .log-level.warning, .log-entry.warning .log-level { background: #FFC107; color: #000; border-left-color: #FFC107; }
+        .log-level.error, .log-entry.error .log-level { background: #f44336; color: #fff; border-left-color: #f44336; }
+        .log-level.debug, .log-entry.debug .log-level { background: #4CAF50; color: #fff; border-left-color: #4CAF50; }
+        .log-name { color: #bbb; margin-right: 5px; font-size: 10px;}
+        .log-source { color: #888; font-size: 10px; margin-left: 5px;}
+        .log-message { display: block; margin-top: 2px; white-space: pre-wrap; }
+
+        /* LLM Log Specific */
+        .llm-log-entry { border-left: 3px solid #9c27b0; } /* Purple indicator */
+        .llm-log-type {
+            font-weight: bold; color: #ce9178; /* Orange-ish */
+            margin-right: 5px; text-transform: capitalize;
+        }
+        .llm-log-message pre {
+            margin: 5px 0 0 0; padding: 8px; background: #1e1e1e;
+            border-radius: 4px; white-space: pre-wrap; color: #d4d4d4;
+            max-height: 200px; overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-panel">
+        <div class="debug-header">
+            <h3>디버그 패널</h3>
+            <div class="debug-controls">
+                <button id="clearLogs"><i class="fas fa-trash"></i> 로그 지우기</button>
+                <!-- <button id="togglePause"><i class="fas fa-pause"></i> 일시정지</button> -->
+            </div>
+        </div>
+        <div class="debug-content">
+            <div class="debug-tabs">
+                <button class="tab-button active" onclick="showDebugTab('communication')">통신</button>
+                <button class="tab-button" onclick="showDebugTab('logs')">서버 로그</button>
+                <!-- <button class="tab-button" onclick="showDebugTab('llm')">LLM/Tool 로그</button>-->
+            </div>
+            <div id="debug-communication" class="debug-tab active">
+                <!-- Communication logs will appear here -->
+            </div>
+            <div id="debug-logs" class="debug-tab">
+                <!-- General server logs will appear here -->
+            </div>
+            <!-- <div id="debug-llm" class="debug-tab">
+                LLM/Tool communication logs will appear here 
+            </div>-->
+        </div>
+    </div>
+
+    <script>
+        // API 기본 URL
+        const BASE_PATH = window.opener && window.opener.BASE_PATH ? window.opener.BASE_PATH : (window.location.pathname.split('/')[1] === 'mcp-agent' ? '/mcp-agent' : '');
+
+        let eventSource = null;
+        const MAX_LOG_ENTRIES = 200; // Max entries per tab
+
+        // jQuery가 로드된 후에 실행
+        $(document).ready(function() {
+            connectSSE(); // Start listening for logs immediately
+
+            // Clear Logs Button
+            $('#clearLogs').on('click', function() {
+                $('#debug-communication').empty();
+                $('#debug-logs').empty();
+                $('#debug-llm').empty();
+            });
+
+            // Optional: Pause/Resume functionality (if needed)
+            /*
+            let isPaused = false;
+            $('#togglePause').on('click', function() {
+                isPaused = !isPaused;
+                $(this).html(isPaused ? '<i class="fas fa-play"></i> 재개' : '<i class="fas fa-pause"></i> 일시정지');
+            });
+            */
+
+            // Optional: Add AJAX interceptor if you want separate logging for requests made *from* this popup
+            // (Usually not needed as main window logs cover most API calls)
+            /*
+            $.ajaxSetup({ ... });
+            */
+        });
+
+        // 디버그 탭 전환 함수
+        function showDebugTab(tabName) {
+            $('.tab-button').removeClass('active');
+            $('.debug-tab').removeClass('active');
+            $(`.tab-button[onclick="showDebugTab('${tabName}')"]`).addClass('active');
+            $(`#debug-${tabName}`).addClass('active');
+        }
+
+        // SSE 연결 함수
+        function connectSSE() {
+            console.log(`Attempting to connect to ${BASE_PATH}/logs...`);
+            if (eventSource) {
+                eventSource.close();
+            }
+            eventSource = new EventSource(`${BASE_PATH}/logs`);
+
+            eventSource.onopen = function() {
+                console.log(`Connection to ${BASE_PATH}/logs opened.`);
+                // Optional: Add a system message to the log tab
+                // addLog({ level: 'INFO', message: 'Debug log stream connected.' });
+            };
+
+            eventSource.onmessage = (event) => {
+                // if (isPaused) return; // Skip if paused
+                try {
+                    const logData = JSON.parse(event.data);
+                    // console.log("Received SSE log:", logData);
+
+                    // Route log to the correct tab based on its content/type
+                    if (logData.type === 'log') { // General server logs
+                        addLog(logData);
+                    } else if (['llm_request', 'llm_response', 'tool_call', 'tool_result'].includes(logData.type)) { // LLM/Tool logs
+                        addLLMLogEntry(logData);
+                    } else if (logData.method && logData.url) { // Assuming comms log structure
+                        addDebugEntry(logData.method, logData.url, logData.request, logData.response, logData.error);
+                    } else {
+                        // Fallback: Add to general logs if type is unknown
+                        console.warn("Unknown log type received via SSE:", logData);
+                        addLog(logData);
+                    }
+                } catch (e) {
+                    console.error("Error parsing SSE data:", e, "Raw data:", event.data);
+                    // Add raw data as an error log entry
+                    addLog({ level: 'ERROR', message: `Failed to parse SSE data: ${event.data}`});
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE Connection Error:', error);
+                addLog({ level: 'ERROR', message: 'SSE connection error. Attempting to reconnect...' });
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                // Simple reconnect strategy
+                setTimeout(connectSSE, 5000);
+            };
+        }
+
+        // 로그 추가 공통 함수 (Prepends and limits entries)
+        function prependLogEntry($container, $entry, maxEntries) {
+            $container.prepend($entry);
+            const entries = $container.children();
+            if (entries.length > maxEntries) {
+                entries.last().remove();
+            }
+        }
+
+        // 디버그 정보 추가 함수 (AJAX 통신 로그용)
+        function addDebugEntry(method, url, request, response, error = null) {
+            const $logList = $('#debug-communication');
+            const timestamp = new Date().toLocaleTimeString();
+            const $entry = $('<div>').addClass('debug-entry');
+
+            const methodClass = method ? method.toLowerCase() : 'unknown';
+            const $methodSpan = $('<span>').addClass('debug-method').addClass(methodClass).text(method || '-');
+            const $urlSpan = $('<span>').addClass('debug-url').text(url || '-');
+
+            // Request formatting
+            let requestText = '[No Request Data]';
+            if (request !== undefined && request !== null) {
+                try { requestText = JSON.stringify(request, null, 2); } catch (e) { requestText = '[Serialization Error]'; }
+            }
+            const $requestDiv = $('<details class="debug-request-container"><summary>Request</summary><pre class="debug-request"></pre></details>');
+            $requestDiv.find('pre').text(requestText);
+
+            // Response formatting
+            let statusText = '-';
+            let responseText = '[No Response]';
+            if (response) {
+                statusText = `${response.status || '-'} ${response.statusText || ''}`.trim();
+                try { responseText = JSON.stringify(JSON.parse(response.responseText || 'null'), null, 2); } catch (e) { responseText = response.responseText || '[No Response Text]'; }
+            }
+            const $responseDiv = $('<details class="debug-response-container"><summary>Response (${statusText})</summary><pre class="debug-response"></pre></details>');
+            $responseDiv.find('pre').text(responseText);
+
+            $entry.append(
+                $('<span>').addClass('debug-timestamp').text(timestamp),
+                $methodSpan, $urlSpan, $requestDiv, $responseDiv
+            );
+
+            if (error) {
+                $entry.append($('<div>').addClass('debug-error').text(`Error: ${error}`));
+            }
+
+            prependLogEntry($logList, $entry, MAX_LOG_ENTRIES);
+        }
+
+        // 서버 일반 로그 추가 함수
+        function addLog(logEntry) {
+            const $logList = $('#debug-logs');
+            const $entry = $('<div>').addClass('log-entry').addClass((logEntry.level || 'info').toLowerCase());
+
+            const timestamp = logEntry.timestamp ? new Date(logEntry.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+
+            $entry.append(
+                $('<span>').addClass('log-timestamp').text(timestamp),
+                $('<span>').addClass('log-level').text(logEntry.level || 'INFO'),
+                logEntry.name ? $('<span>').addClass('log-name').text(logEntry.name) : null,
+                (logEntry.pathname || logEntry.lineno) ? $('<span>').addClass('log-source').text(`(${logEntry.pathname || ''}:${logEntry.lineno || ''})`) : null,
+                $('<span>').addClass('log-message').text(logEntry.message || '')
+            );
+
+            prependLogEntry($logList, $entry, MAX_LOG_ENTRIES);
+        }
+
+        // LLM/Tool 통신 로그 추가 함수
+        function addLLMLogEntry(logEntry) {
+            const $logList = $('#debug-llm');
+            const $entry = $('<li>').addClass('llm-log-entry');
+            const timestamp = logEntry.timestamp ? new Date(logEntry.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const logType = logEntry.type || 'unknown';
+
+            let messageContent = '';
+            try {
+                // Attempt to parse and format JSON message content
+                const parsedMessage = JSON.parse(logEntry.message);
+                messageContent = `<pre>${JSON.stringify(parsedMessage, null, 2)}</pre>`;
+            } catch (e) {
+                // Fallback to plain text
+                messageContent = logEntry.message || '';
+            }
+
+            $entry.append(
+                $('<span>').addClass('llm-log-timestamp').text(timestamp),
+                $('<span>').addClass('llm-log-type').text(logType.replace('_', ' ')),
+                $('<div>').addClass('llm-log-message').html(messageContent)
+            );
+
+            prependLogEntry($logList, $entry, MAX_LOG_ENTRIES);
+        }
+
+        // 알림 메시지 표시 함수 (Optional, for errors within the popup itself)
+        function showNotification(message) {
+        $('.notification').remove();
+        const notification = $('<div>').addClass('notification').text(message);
+        $('body').append(notification);
+        setTimeout(() => {
+            notification.addClass('fade-out');
+            setTimeout(() => notification.remove(), 500);
+        }, 2000);
+        }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const communicationLogDiv = document.getElementById('debug-communication');
+
+        // index.html에서 직접 호출될 함수
+        window.logAjaxFromOpener = function(logData) {
+            if (!communicationLogDiv) {
+                console.error("Debug panel 'debug-communication' for opener logs not found.");
+                return;
+            }
+            
+            const messageParts = [];
+            if (logData.method) messageParts.push(logData.method.toUpperCase());
+            if (logData.url) messageParts.push(logData.url);
+            if (logData.status) messageParts.push(`(${logData.status})`);
+
+            let type = 'info'; // 기본 로그 타입
+            let dataPreview = '';
+            let sourcePrefix = logData.source ? `[${logData.source}] ` : '';
+
+            if (logData.type) {
+                if (logData.type.includes('-request')) {
+                    type = 'req';
+                    if(logData.data && logData.data !== 'null') dataPreview = ` - Request Data: ${logData.data}`;
+                } else if (logData.type.includes('-response')) {
+                    type = logData.status >= 400 ? 'error' : 'res';
+                    if(logData.response) dataPreview = ` - Response: ${logData.response}`;
+                } else if (logData.type.includes('-error') || logData.type.includes('read-error')) {
+                    type = 'error';
+                    if(logData.error) dataPreview = ` - Error: ${logData.error}`;
+                }
+            }
+            
+            const message = `${sourcePrefix}${messageParts.join(' ')}${dataPreview}`;
+            logToDebugPanel(message, type); // debug_popup.html 자체의 로깅 함수 재사용
+        }
+
+        // 디버그 팝업이 열릴 때 부모 창(index.html)에 자신의 참조를 등록
+        if (window.opener && !window.opener.closed) {
+            window.opener.debugPopupRef = window;
+            console.log("Debug popup registered itself to opener (index.html).");
+            // Optional: Send a message back to opener to confirm registration
+            // window.opener.postMessage({ type: 'debugPopupReady' }, '*'); 
+        } else {
+            console.warn("No opener window found or opener is closed. AJAX logs from index.html may not be received.");
+        }
+
+        function logToDebugPanel(message, type = 'info') {
+            if (!communicationLogDiv) {
+                console.error("Debug panel 'debug-communication' not found.");
+                return;
+            }
+            const logEntry = document.createElement('div');
+            logEntry.classList.add('log-entry');
+            if (type === 'error') {
+                logEntry.classList.add('log-error'); // Style errors differently
+                logEntry.style.color = 'red';
+            } else if (type === 'req') {
+                logEntry.style.color = 'blue';
+            } else if (type === 'res') {
+                logEntry.style.color = 'green';
+            }
+
+
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            if (communicationLogDiv.firstChild) {
+                communicationLogDiv.insertBefore(logEntry, communicationLogDiv.firstChild);
+            } else {
+                communicationLogDiv.appendChild(logEntry);
+            }
+        }
+
+        // --- XHR Interception ---
+        if (typeof XMLHttpRequest !== 'undefined') {
+            const originalXhrOpen = XMLHttpRequest.prototype.open;
+            const originalXhrSend = XMLHttpRequest.prototype.send;
+
+            XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+                this._method = method;
+                this._url = url;
+                // logToDebugPanel(`XHR Opened: ${method} ${url}`, 'req'); // Can be noisy
+                return originalXhrOpen.apply(this, arguments);
+            };
+
+            XMLHttpRequest.prototype.send = function(data) {
+                logToDebugPanel(`XHR REQ: ${this._method} ${this._url} - Data: ${data ? String(data).substring(0, 70) + (String(data).length > 70 ? '...' : '') : 'N/A'}`, 'req');
+                
+                this.addEventListener('readystatechange', function() {
+                    if (this.readyState === 4) { // DONE
+                        let responseTextPreview = 'N/A';
+                        try {
+                            if (typeof this.responseText === 'string' && this.responseText.length > 0) {
+                                responseTextPreview = this.responseText.substring(0, 100) + (this.responseText.length > 100 ? '...' : '');
+                            } else if (this.response) {
+                                responseTextPreview = `[Response type: ${typeof this.response}, preview unavailable]`;
+                            }
+                        } catch (e) {
+                            responseTextPreview = '[Error accessing responseText]';
+                        }
+                        logToDebugPanel(`XHR RES: ${this.status} ${this._method} ${this._url} - Response: ${responseTextPreview}`, this.status >= 400 ? 'error' : 'res');
+                    }
+                });
+                this.addEventListener('error', function () {
+                    logToDebugPanel(`XHR ERR: ${this._method} ${this._url} - Network Error`, 'error');
+                });
+                return originalXhrSend.apply(this, arguments);
+            };
+        }
+
+        // --- Fetch Interception ---
+        if (window.fetch) {
+            const originalFetch = window.fetch;
+            window.fetch = function() {
+                const args = Array.from(arguments);
+                let resource = args[0];
+                let options = args[1] || {};
+                
+                let urlString;
+                let method = options.method || 'GET';
+
+                if (typeof resource === 'string') {
+                    urlString = resource;
+                } else if (resource instanceof Request) {
+                    urlString = resource.url;
+                    method = resource.method;
+                } else {
+                    urlString = String(resource); // Fallback
+                }
+                
+                let bodyPreview = 'N/A';
+                if (options.body) {
+                    bodyPreview = String(options.body).substring(0, 70) + (String(options.body).length > 70 ? '...' : '');
+                }
+
+
+                logToDebugPanel(`FETCH REQ: ${method} ${urlString} - Body: ${bodyPreview}`, 'req');
+
+                return originalFetch.apply(this, args)
+                    .then(response => {
+                        const clonedResponse = response.clone();
+                        const contentType = clonedResponse.headers.get("content-type");
+                        let dataPreviewPromise;
+
+                        if (contentType && contentType.includes("application/json")) {
+                            dataPreviewPromise = clonedResponse.json().then(data => `JSON: ${JSON.stringify(data).substring(0, 100)}...`).catch(() => "Invalid JSON");
+                        } else if (contentType && contentType.includes("text/")) {
+                            dataPreviewPromise = clonedResponse.text().then(data => `Text: ${data.substring(0, 100)}...`).catch(() => "Error reading text");
+                        } else {
+                            dataPreviewPromise = Promise.resolve(`Content-Type: ${contentType || 'N/A'}, preview unavailable`);
+                        }
+                        
+                        dataPreviewPromise.then(preview => {
+                            logToDebugPanel(`FETCH RES: ${response.status} ${method} ${urlString} - ${preview}`, response.ok ? 'res' : 'error');
+                        });
+                        return response; 
+                    })
+                    .catch(error => {
+                        logToDebugPanel(`FETCH ERR: ${method} ${urlString} - Error: ${error}`, 'error');
+                        throw error;
+                    });
+            };
+        }
+        logToDebugPanel("AJAX/Fetch call logging initialized for debug panel.");
+    });
+    </script>
+</body>
+</html> 

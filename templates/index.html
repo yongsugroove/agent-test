@@ -1,0 +1,1606 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP 웹 클라이언트</title>
+    <link rel="stylesheet" href="static/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <style>
+        /* 기존 #closeMainAppButton의 fixed 스타일을 제거하거나 여기서 재정의 */
+        #closeMainAppButton {
+            /* position: fixed; top: 10px; right: 10px; - 이 스타일 제거 또는 주석 처리 */
+            background: transparent;
+            border: none;
+            color: #5f6368;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s, color 0.2s;
+            width: 32px; /* 크기 조정 */
+            height: 32px; /* 크기 조정 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1em; /* 아이콘 크기 조정 */
+            z-index: auto; /* fixed가 아니므로 z-index 조정 */
+            margin-left: 10px; /* 왼쪽 텍스트와의 간격 */
+        }
+        #closeMainAppButton:hover {
+            background-color: rgba(0, 0, 0, 0.08);
+            color: #1f1f1f;
+        }
+
+        /* 화면 캡처 버튼 및 컨테이너를 위한 새로운 스타일 */
+        .chat-input-container {
+            display: flex; /* Flexbox 레이아웃 사용 */
+            align-items: center; /* 수직 중앙 정렬 */
+        }
+
+        #upload-image-button {
+            background-color: transparent;
+            border: none;
+            color: #5f6368; /* 아이콘 색상 (기존 스타일과 유사하게) */
+            cursor: pointer;
+            padding: 7px; /* 내부 여백 */
+            margin-right: 8px; /* 텍스트 입력창과의 간격 */
+            border-radius: 50%; /* 원형 버튼 */
+            display: inline-flex; /* SVG 아이콘 중앙 정렬 */
+            justify-content: center;
+            align-items: center;
+            width: 38px;  /* 버튼 너비 */
+            height: 38px; /* 버튼 높이 */
+            transition: background-color 0.2s; /* 부드러운 호버 효과 */
+        }
+
+        #upload-image-button:hover {
+            background-color: rgba(0, 0, 0, 0.08); /* 호버 시 배경색 */
+        }
+
+        #upload-image-button svg {
+            width: 20px; /* SVG 아이콘 크기 */
+            height: 20px;
+        }
+
+        /* --- UI 개선 작업 --- */
+        .message.assistant .message-bubble, /* assistant 역할 명시적 추가 */
+        .message.agent .message-bubble { 
+            border: none;
+            /* box-shadow는 .message 기본 스타일에서 이미 받고 있음 */
+        }
+
+        .date-separator {
+            text-align: center;
+            margin: 15px 0;
+            color: #888;
+            font-size: 0.85em;
+        }
+        .date-separator span {
+            background-color: #f0f2f5; /* 채팅 배경색과 유사하게 또는 원하는 색으로 */
+            padding: 5px 15px;
+            border-radius: 12px;
+        }
+        
+        .message.user {
+            display: flex; /* 시간과 메시지 버블을 가로로 배치 */
+            justify-content: flex-end; /* 내용을 오른쪽으로 정렬 */
+            align-items: flex-end; /* 하단 정렬 */
+            margin-bottom: 10px; /* 메시지 간 간격 유지 */
+        }
+
+        .user-message-time { /* 사용자 질문 시간 (외부 왼쪽) */
+            font-size: 0.7em; 
+            color: #999;    
+            margin-right: 8px; /* 메시지 버블과의 간격 */
+            white-space: nowrap;
+            /* flex-shrink: 0; /* 시간이 줄어들지 않도록 */ /* 필요시 활성화 */
+        }
+        /* --- UI 개선 작업 끝 --- */
+        
+        /* 레이어 팝업 공통 스타일 */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .popup-content {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .popup-header h3 {
+            margin: 0;
+            font-size: 1.2em;
+            font-weight: 500;
+        }
+        
+        .close-popup {
+            background: transparent;
+            border: none;
+            color: #5f6368;
+            cursor: pointer;
+            padding: 4px;
+            font-size: 1.1em;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .close-popup:hover {
+            background-color: rgba(0, 0, 0, 0.08);
+        }
+        
+        .popup-body {
+            padding: 16px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        
+        /* 채팅 세션 목록 스타일 */
+        .chat-session-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .chat-session-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 8px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .chat-session-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .chat-session-item.active {
+            background-color: #e8f0fe;
+        }
+        
+        .chat-session-info {
+            flex-grow: 1;
+            overflow: hidden;
+        }
+        
+        .chat-session-title {
+            font-weight: 500;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .chat-session-date {
+            font-size: 0.8em;
+            color: #5f6368;
+        }
+        
+        .chat-session-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .chat-session-action-btn {
+            background: transparent;
+            border: none;
+            color: #5f6368;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.9em;
+        }
+        
+        .chat-session-action-btn:hover {
+            background-color: rgba(0, 0, 0, 0.08);
+            color: #202124;
+        }
+        
+        .chat-session-action-btn.delete-btn:hover {
+            background-color: rgba(217, 48, 37, 0.1);
+            color: #d93025;
+        }
+        
+        /* 세션 제목 편집 폼 */
+        .session-edit-form {
+            display: flex;
+            margin-top: 4px;
+        }
+        
+        .session-edit-input {
+            flex-grow: 1;
+            padding: 6px 8px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .session-edit-btn, .session-cancel-btn {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            cursor: pointer;
+            margin-left: 8px;
+            font-size: 0.9em;
+        }
+        
+        .session-cancel-btn {
+            background-color: #5f6368;
+        }
+        
+        /* 스크롤 하단 이동 버튼 */
+        .scroll-to-bottom-btn {
+            position: absolute;
+            bottom: 120px;
+            right: 20px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2em;
+            z-index: 10;
+            transition: all 0.2s ease;
+            opacity: 0.9;
+        }
+        
+        .scroll-to-bottom-btn:hover {
+            background-color: #175abc;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            opacity: 1;
+        }
+        
+        .scroll-to-bottom-btn i {
+            margin-top: 2px;
+        }
+        
+        /* 채팅 컨테이너 relative로 설정해 버튼 배치 기준점 제공 */
+        .chat-container {
+            position: relative;
+        }
+        
+        /* 로딩 애니메이션 스타일 */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 4px;
+        }
+        
+        .typing-indicator-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #8e8e8e;
+            animation: typing-animation 1.5s infinite ease-in-out;
+        }
+        
+        .typing-indicator-dot:nth-child(1) {
+            animation-delay: 0s;
+        }
+        
+        .typing-indicator-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-indicator-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing-animation {
+            0% {
+                transform: scale(1);
+                opacity: 0.5;
+            }
+            50% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 0.5;
+            }
+        }
+    </style>
+</head>
+<body class='chat-app-body' 
+    data-user-info='{{ user_info | tojson | safe if user_info else "null" }}'
+    data-error-message='{{ error | tojson | safe if error else "null" }}'
+    data-login-required='{{ login_required | tojson | safe if login_required else "false" }}'>
+    <!-- 사용자 정보 표시 영역 -->
+    <div id="userInfoDisplay" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background-color: #f0f0f0; border-bottom: 1px solid #ccc; font-size: 0.9em;">
+        <div> 
+            {% if user_info and user_info.recv and user_info.recv.id %}
+                <span><strong>{{ user_info.recv.name | default(user_info.recv.id) }}</strong> 님</span>
+                {# <pre style="font-size: 0.7em; text-align: left;">{{ user_info | tojson(indent=2) }}</pre> #}
+            {% elif login_required %}
+                <span>로그인이 필요합니다. <a href="{{auth_url}}">로그인</a></span> {# 실제 로그인 URL로 연결 필요 #}
+            {% elif error %}
+                <span style="color: red;">오류: {{ error }}</span>
+            {% else %}
+                <span>사용자 정보를 불러올 수 없습니다.</span>
+            {% endif %}
+        </div>
+        <button id="closeMainAppButton" title="애플리케이션 닫기"><i class="fas fa-times"></i></button> <!-- 버튼을 userInfoDisplay 내부로 이동 -->
+    </div>
+
+    <div class="container chat-app-container">
+        <!-- 액션 버튼들을 .chat-app-container의 최상단으로 이동 -->
+        <div class="chat-action-buttons">
+            <button id="newChatButton" title="새 채팅" class="action-button-default"><i class="fas fa-plus"></i></button>
+            <button id="chatListButton" title="대화 목록" class="action-button-default"><i class="fas fa-list"></i></button>
+            <button id="openServerToolPopupButton" title="서버/툴 관리" class="action-button-default"><i class="fas fa-server"></i></button>
+            <button id="openPromptPopupButton" title="프롬프트 관리" class="action-button-default"><i class="fas fa-file-alt"></i></button>
+            <button id="openDebugPopupButton" title="디버그 콘솔" class="action-button-default"><i class="fas fa-bug"></i></button>
+            
+            <!-- 검색 토글 버튼 -->
+            <button id="searchChatToggleButton" title="채팅 검색" class="action-button-default">
+                <i class="fas fa-search"></i><i class="fas fa-times" style="display:none;"></i> <!-- X 아이콘 추가 -->
+            </button>
+
+            <!-- 검색 입력 영역 (CSS로 제어) -->
+            <div id="chatSearchInputAreaWrapper" class="search-input-area-wrapper">
+                <input type="text" id="searchInput" placeholder="검색할 내용을 입력하세요.">
+                <button id="clearSearchInputButton" title="입력 내용 지우기 & 닫기"><i class="fas fa-times"></i></button> <!-- 새로운 닫기 버튼 -->
+                <span id="searchResultCount">0/0</span>
+                <button id="searchPrevButton" title="이전"><i class="fas fa-arrow-up"></i></button>
+                <button id="searchNextButton" title="다음"><i class="fas fa-arrow-down"></i></button>
+            </div>
+            
+        </div>
+
+        <div class="chat-container">
+            <div id="chatMessages" class="chat-messages">
+                <!-- Messages will be added here -->
+            </div>
+
+            <button id="scrollToBottomBtn" class="scroll-to-bottom-btn" style="display: none;">
+                <i class="fas fa-arrow-down"></i>
+            </button>
+
+            <div class="chat-input-container">
+                <input type="file" id="image-upload-input" accept="image/*" style="display: none;">
+                <button id="upload-image-button" title="이미지 파일 첨부">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-paperclip" viewBox="0 0 16 16">
+                    <path d="M4.5 3a2.5 2.5 0 0 1 5 0v9a1.5 1.5 0 0 1-3 0V5a.5.5 0 0 1 1 0v7a.5.5 0 0 0 1 0V3a1.5 1.5 0 1 0-3 0v9a2.5 2.5 0 0 0 5 0V5a.5.5 0 0 1 1 0v7a3.5 3.5 0 1 1-7 0z"/>
+                    </svg>
+                </button>
+                <textarea id="userInput" placeholder="메시지를 입력하세요..." rows="1"></textarea>
+                <button id="sendButton"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const bodyElement = document.body;
+        const currentUserInfo = JSON.parse(bodyElement.dataset.userInfo || 'null');
+        const errorFromTemplate = JSON.parse(bodyElement.dataset.errorMessage || 'null');
+        // loginRequiredFromTemplate는 문자열 'true'/'false' 또는 null이 될 수 있으므로, boolean으로 변환
+        const loginRequiredString = bodyElement.dataset.loginRequired;
+        const loginRequiredFromTemplate = loginRequiredString === 'true'; 
+
+        const initialAccessToken = "{{ request.cookies.get('access_token', '') }}"; 
+        const initialUserId = "{{ request.cookies.get('user_id', '') }}"; 
+
+        // API 경로 예시 (실제 환경에 맞게 수정 필요)
+        const appRootPath = "{{ request.app.root_path or '' }}"; // FastAPI app의 root_path가 있다면 사용
+
+        if (currentUserInfo) {
+            console.log("Current User Info (from data attribute):", currentUserInfo);
+        } else {
+            console.log("User info not available for JavaScript.");
+        }
+
+        if (errorFromTemplate) {
+            console.error("Server Error (from data attribute):", errorFromTemplate);
+            // 예: showNotification(errorFromTemplate);
+        }
+
+        if (loginRequiredFromTemplate) { // 이제 boolean true/false로 비교
+            console.log("Login is required.");
+        }
+
+        let conversationHistory = [];
+        let tempImageDataForNextMessage = null; // 첨부된 이미지 Data URL 임시 저장 변수
+        let lastMessageDate = null; // 전역 스코프에 선언
+        
+        // 부드러운 스크롤 함수 - 전역 스코프로 이동
+        function scrollToBottom(animated = false) {
+            const $chatMessages = $('#chatMessages');
+            if (animated) {
+                $chatMessages.animate({
+                    scrollTop: $chatMessages[0].scrollHeight
+                }, 300);
+            } else {
+                $chatMessages.scrollTop($chatMessages[0].scrollHeight);
+            }
+        }
+
+        $(document).ready(function() {
+            $('#sendButton').on('click', sendMessage);
+            
+            $('#userInput').on('keydown input', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            });
+            $('#userInput').trigger('input');
+
+            marked.setOptions({
+                breaks: true,
+                gfm: true
+            });
+
+            // --- 이전 대화 로드 함수 호출 ---
+            loadPreviousChat(); 
+            // --- 이전 대화 로드 함수 호출 끝 ---
+
+            // --- Iframe Control Buttons --- 
+            const closeButton = document.getElementById('closeMainAppButton');
+            if (closeButton) {
+                closeButton.addEventListener('click', () => {
+                    if (window.parent && typeof window.parent.hideChatWidget === 'function') {
+                        window.parent.hideChatWidget();
+                    } else {
+                        // 부모 컨텍스트가 없거나 함수가 없을 경우 (예: 직접 / 로 접근한 경우)
+                        console.log("hideChatWidget not found in parent. This might be the main window.");
+                        // 필요시 현재 창을 닫거나 다른 동작 수행
+                        // window.close(); // (사용자 경험에 따라 부적절할 수 있음)
+                    }
+                });
+            }
+
+            $('#openServerToolPopupButton').on('click', function() {
+                window.open(`${appRootPath}/server-tool-popup`, 'ServerToolPopup', 'width=600,height=700,scrollbars=yes,resizable=yes');
+            });
+
+            $('#openPromptPopupButton').on('click', function() {
+                window.open(`${appRootPath}/prompt-popup`, 'PromptPopup', 'width=500,height=600,scrollbars=yes,resizable=yes');
+            });
+
+            $('#openDebugPopupButton').on('click', function() {
+                window.open(`${appRootPath}/debug-popup`, 'DebugPopup', 'width=800,height=600,scrollbars=yes,resizable=yes');
+            });
+
+            // 새 채팅 버튼 클릭 이벤트 처리
+            $('#newChatButton').on('click', function() {
+                startNewChat();
+            });
+
+            // 대화 목록 버튼 클릭 이벤트
+            $('#chatListButton').on('click', function() {
+                openChatListPopup();
+            });
+            
+            // 대화 목록 팝업 닫기 버튼
+            $('#closeChatListPopup').on('click', function() {
+                $('#chatListPopup').hide();
+            });
+
+            // 화면 캡처 버튼 이벤트 리스너 추가 (이제 이미지 업로드 버튼으로 변경)
+            $('#upload-image-button').on('click', function() {
+                $('#image-upload-input').click(); // 숨겨진 파일 입력 클릭 트리거
+            });
+
+            // 파일 입력 변경 이벤트 리스너
+            $('#image-upload-input').on('change', handleImageUpload);
+
+            // --- 채팅 검색 UI 이벤트 리스너 ---
+            const chatActionButtonsContainer = $('.chat-action-buttons'); // 컨테이너 클래스명 유지
+            // const defaultActionButtons = $('.action-button-default'); // CSS로 제어하므로 직접 참조 불필요할 수 있음
+            const searchInputAreaWrapper = $('#chatSearchInputAreaWrapper');
+            const searchInput = $('#searchInput');
+            const searchChatToggleButton = $('#searchChatToggleButton');
+            // const closeSearchButton = $('#closeSearchButton'); // 토글 버튼이 겸함
+            const clearSearchInputButton = $('#clearSearchInputButton'); // 새로 추가된 닫기 버튼
+            const searchResultCount = $('#searchResultCount'); // 유지
+            const searchPrevButton = $('#searchPrevButton'); // 유지
+            const searchNextButton = $('#searchNextButton'); // 유지
+
+            let searchResults = []; // 유지
+            let currentSearchResultIndex = -1; // 유지
+
+            searchChatToggleButton.on('click', function() {
+                chatActionButtonsContainer.toggleClass('searching');
+                if (chatActionButtonsContainer.hasClass('searching')) {
+                    searchInput.focus();
+                } else {
+                    // 검색 UI가 닫힐 때 초기화 로직 (기존 hideSearchUI의 일부)
+                    searchInput.val('');
+                    unhighlightAllMessages();
+                    searchResults = [];
+                    currentSearchResultIndex = -1;
+                    updateSearchResultUI();
+                    $('.message.search-active').removeClass('search-active');
+                    // clearSearchInputButton.hide(); // 검색창 닫힐 때 닫기 버튼도 숨김 (CSS로 제어 예정)
+                }
+            });
+
+            // 새로 추가된 X 버튼(입력창 옆) 클릭 시 검색 UI 닫기
+            clearSearchInputButton.on('click', function() {
+                // searchInput.val(''); // 입력 내용 지우기 (선택사항)
+                // performSearch(); // 지워진 내용으로 검색 결과 업데이트 (선택사항)
+                searchChatToggleButton.click(); // 돋보기 버튼 클릭 효과로 UI 닫기
+            });
+
+            // 검색 입력, 다음/이전 버튼 리스너는 유지
+            searchInput.on('input', function() {
+                performSearch(); // Debounce 적용 고려
+            });
+
+            searchNextButton.on('click', function() {
+                navigateToNextResult();
+            });
+
+            searchPrevButton.on('click', function() {
+                navigateToPrevResult();
+            });
+
+            // performSearch, highlightTextInMessage, unhighlightAllMessages, updateSearchResultUI, scrollToSearchResult, navigateToNextResult, navigateToPrevResult 함수들은
+            // 내부 로직은 거의 유지하되, UI 요소 참조가 새 구조에 맞는지 확인 필요 (대부분 ID 기반이라 큰 변경 없을 듯)
+            // unhighlightAllMessages 에서는 searchResults를 초기화하지 않도록 주의 (토글 버튼 로직에서 처리)
+            function unhighlightAllMessages() {
+                searchResults.forEach(item => {
+                    const textContentContainer = $(item.element).is('.user-message') ? $(item.element).children('div').first() : $(item.element).find('.markdown-content');
+                    if(item.originalHTML !== undefined) {
+                         textContentContainer.html(item.originalHTML);
+                    }
+                });
+                $('#chatMessages .highlight-search').each(function() {
+                    $(this).replaceWith($(this.text()));
+                });
+            }
+
+            function performSearch() {
+                const searchTerm = searchInput.val().trim().toLowerCase();
+                unhighlightAllMessages();
+                searchResults = [];
+                currentSearchResultIndex = -1;
+                $('.message.search-active').removeClass('search-active');
+
+                if (!searchTerm) {
+                    updateSearchResultUI();
+                    return;
+                }
+
+                // 메시지를 DOM 순서대로 (위에서 아래로) 탐색 (기존 방식 유지)
+                $('#chatMessages .message').each(function() {
+                    const messageDiv = $(this);
+                    const textContentContainer = messageDiv.is('.user-message') ? messageDiv.children('div').first() : messageDiv.find('.markdown-content');
+                    
+                    if (textContentContainer.length > 0) {
+                        const originalHTML = textContentContainer.html(); // 하이라이트 전에 원본 저장
+                        const messageText = textContentContainer.text().toLowerCase();
+                        if (messageText.includes(searchTerm)) {
+                            searchResults.push({ element: messageDiv[0], originalHTML: originalHTML }); 
+                            highlightTextInMessage(textContentContainer, searchTerm);
+                        }
+                    }
+                });
+                
+                updateSearchResultUI(); // 검색 결과 수 업데이트
+
+                if (searchResults.length > 0) {
+                    // 가장 최신 검색 결과(배열의 마지막 요소)로 이동
+                    currentSearchResultIndex = searchResults.length - 1; 
+                    scrollToSearchResult(currentSearchResultIndex);
+                } else {
+                     searchResultCount.text("결과 없음");
+                }
+            }
+
+            function highlightTextInMessage(element, searchTerm) {
+                const text = element.text(); // HTML 태그 제외 순수 텍스트
+                const regex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); // 정규식 특수문자 escape
+                const newHtml = text.replace(regex, match => `<span class="highlight-search">${match}</span>`);
+                element.html(newHtml); // 하이라이트 적용
+            }
+
+            function updateSearchResultUI() {
+                if (searchResults.length > 0) {
+                    searchResultCount.text(`${currentSearchResultIndex + 1} / ${searchResults.length}`);
+                } else if (searchInput.val().trim() === '') {
+                    searchResultCount.text("0/0");
+                } else {
+                    // 검색어는 있는데 결과가 없을 때 "결과 없음"은 performSearch에서 처리
+                }
+                searchPrevButton.prop('disabled', currentSearchResultIndex <= 0);
+                searchNextButton.prop('disabled', currentSearchResultIndex >= searchResults.length - 1 || searchResults.length === 0);
+            }
+
+            function scrollToSearchResult(index) {
+                if (index < 0 || index >= searchResults.length) return;
+                
+                const targetElement = searchResults[index].element;
+                if (targetElement) {
+                    $('.message.search-active').removeClass('search-active');
+                    $(targetElement).addClass('search-active'); 
+
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    currentSearchResultIndex = index;
+                    updateSearchResultUI();
+                }
+            }
+
+            function navigateToNextResult() {
+                if (searchResults.length === 0) return;
+                // 다음 결과는 인덱스 증가 (더 최신, 화면 아래로)
+                const nextIndex = currentSearchResultIndex + 1;
+                if (nextIndex < searchResults.length) {
+                    scrollToSearchResult(nextIndex);
+                }
+            }
+
+            function navigateToPrevResult() {
+                if (searchResults.length === 0) return;
+                // 이전 결과는 인덱스 감소 (더 오래된, 화면 위로)
+                const prevIndex = currentSearchResultIndex - 1;
+                if (prevIndex >= 0) {
+                    scrollToSearchResult(prevIndex);
+                }
+            }
+
+            // 스크롤 하단 이동 버튼 기능
+            const $chatMessages = $('#chatMessages');
+            const $scrollToBottomBtn = $('#scrollToBottomBtn');
+            
+            // 스크롤 이벤트 감지
+            $chatMessages.on('scroll', function() {
+                // 스크롤이 맨 아래에서 300px 이상 올라갔을 때 버튼 표시
+                const scrollTop = $chatMessages.scrollTop();
+                const scrollHeight = $chatMessages[0].scrollHeight;
+                const clientHeight = $chatMessages[0].clientHeight;
+                
+                if (scrollHeight - scrollTop - clientHeight > 300) {
+                    $scrollToBottomBtn.fadeIn(200);
+                } else {
+                    $scrollToBottomBtn.fadeOut(200);
+                }
+            });
+            
+            // 스크롤 버튼 클릭 이벤트
+            $scrollToBottomBtn.on('click', function() {
+                scrollToBottom(true);
+            });
+        });
+
+        function loadPreviousChat() {
+            const sessionId = localStorage.getItem('chat_session_id');
+            if (!sessionId) {
+                console.log("세션 ID가 localStorage에 없습니다. 이전 대화를 로드하지 않습니다.");
+                return;
+            }
+
+            // 현재 세션이 세션 목록에 없으면 추가
+            const sessionList = ChatSessionManager.getSessionList();
+            if (!sessionList.some(s => s.id === sessionId)) {
+                ChatSessionManager.addSession(sessionId);
+            }
+            
+            // 세션 사용 시간 업데이트
+            ChatSessionManager.updateSessionUsageTime(sessionId);
+
+            console.log(`이전 대화 로드 시도 - Session ID: ${sessionId}`);
+            const loadingIndicatorId = 'loading-history-' + Date.now();
+            
+            // 세션 메타데이터 먼저 가져오기
+            $.ajax({
+                url: `${appRootPath}/api/chat/session/${sessionId}`,
+                method: 'GET',
+                contentType: 'application/json',
+                timeout: 10000, // 10초 타임아웃
+                success: function(data) {
+                    console.log("세션 메타데이터 로드 성공:", data);
+                    
+                    // 서버에서 가져온 세션 제목이 있으면 로컬 스토리지 업데이트
+                    if (data && data.session_title) {
+                        ChatSessionManager.updateSession(sessionId, { title: data.session_title });
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("세션 메타데이터 로드 실패:", status, error);
+                }
+            });
+            
+            // 대화 내용 가져오기
+            $.ajax({
+                url: `${appRootPath}/api/chat/history/${sessionId}`,
+                method: 'GET',
+                contentType: 'application/json',
+                timeout: 15000, // 15초 타임아웃 추가
+                success: function(data) {
+                    console.log("이전 대화 기록 로드 성공:", data);
+                    $('#' + loadingIndicatorId).remove(); // 로딩 메시지 제거
+                    if (data && data.logs && data.logs.length > 0) {
+                        console.log(`${data.logs.length}개의 이전 대화 기록 수신`);
+                        data.logs.forEach(log => {
+                            let messageTimestamp;
+                            if (log.timestamp) {
+                                // 서버에서 온 timestamp 문자열이 UTC임을 명시하기 위해 'Z'를 추가합니다.
+                                const utcTimestampString = log.timestamp + "Z"; 
+                                messageTimestamp = new Date(utcTimestampString); // 이제 "2025-05-14T03:59:03Z"로 파싱되어 UTC로 정확히 인식됩니다.
+
+                                // 만약 파싱에 실패하면 (잘못된 형식 등), 현재 시간으로 대체
+                                if (isNaN(messageTimestamp.getTime())) {
+                                    console.warn("UTC timestamp parsing failed (after adding Z), using current time:", log.timestamp);
+                                    messageTimestamp = new Date();
+                                }
+                            } else {
+                                messageTimestamp = new Date(); // timestamp가 없으면 현재 시간
+                            }
+                            // addMessage 함수에는 이미 Date 객체인 messageTimestamp가 전달됩니다.
+                            addMessage(log.role, log.content, messageTimestamp, log.image_data_url || null, log.id || null);
+                        });
+                        // 가장 최근 메시지로 스크롤 (선택 사항)
+                        // const chatMessagesDiv = $('#chatMessages')[0];
+                        // chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+                    } else {
+                        console.log("표시할 이전 대화 기록이 없습니다.");
+                        // 대화 기록이 없는 경우에도 로딩 메시지 제거 확인
+                        if (document.getElementById(loadingIndicatorId)) {
+                            $('#' + loadingIndicatorId).remove();
+                        }
+                    }
+                },
+                error: function(xhr, status, error) {
+                    $('#' + loadingIndicatorId).remove(); // 로딩 메시지 제거
+                    console.error("이전 대화 기록 로드 실패:", status, error);
+                    let errorMessage = "이전 대화 기록을 불러오는 데 실패했습니다.";
+                    if (xhr.responseJSON && xhr.responseJSON.detail) {
+                        errorMessage = xhr.responseJSON.detail;
+                    }
+                    addMessage('system', errorMessage, new Date());
+                },
+                complete: function() {
+                    // 마지막 안전장치로 로딩 메시지 제거 확인
+                    if (document.getElementById(loadingIndicatorId)) {
+                        $('#' + loadingIndicatorId).remove();
+                    }
+                }
+            });
+        }
+
+        function sendMessage() {
+            const messageText = $('#userInput').val().trim();
+            
+            // 메시지 텍스트와 첨부 이미지가 모두 없는 경우 전송하지 않음
+            if (!messageText && !tempImageDataForNextMessage) {
+                console.log("전송할 메시지나 이미지가 없습니다.");
+                return;
+            }
+            
+            // 채팅 메시지가 없는 첫 메시지인지 확인
+            const isFirstMessage = $('#chatMessages .message').length === 0 || ($('#chatMessages .message').length === 1 && $('#chatMessages .message').hasClass('system-message'));
+            
+            // 사용자 메시지를 채팅창에 추가 (텍스트가 있는 경우에만)
+            if (messageText) {
+                // addMessage('user', messageText); // 이전 호출
+                addMessage('user', messageText, new Date()); // 현재 시간으로 timestamp 전달
+            }
+            
+            // 입력창 비우기
+            $('#userInput').val('').trigger('input');
+            
+            // 로딩 메시지 추가 (이미지가 첨부되었어도 일단 텍스트 기반 로딩 메시지)
+            const loadingMessageId = 'loading-' + Date.now();
+            
+            // 애니메이션이 있는 로딩 메시지 추가
+            const typingIndicator = `
+                <div class="typing-indicator">
+                    <span class="typing-indicator-dot"></span>
+                    <span class="typing-indicator-dot"></span>
+                    <span class="typing-indicator-dot"></span>
+                </div>
+            `;
+            addMessage('assistant', typingIndicator, new Date(), null, loadingMessageId);
+
+            let payload = {
+                message: messageText // 텍스트 메시지가 없을 경우 빈 문자열이 됨
+            };
+
+            // 첨부된 이미지가 있으면 페이로드에 추가
+            if (tempImageDataForNextMessage) {
+                payload.image_data = tempImageDataForNextMessage;
+                console.log("이미지 데이터 첨부하여 전송 준비됨");
+            }
+
+            // --- 사용자 정보 추가 (기존 로직) ---
+            if (currentUserInfo && currentUserInfo.recv) {
+                payload.user_id = currentUserInfo.recv.id || currentUserInfo.recv.userId || null;
+                payload.user_company = currentUserInfo.recv.company || null; 
+            }
+            // --- 사용자 정보 추가 끝 ---
+
+            // --- 세션 ID 추가 (기존 로직) ---
+            const currentSessionId = localStorage.getItem('chat_session_id');
+            if (currentSessionId) {
+                payload.session_id = currentSessionId;
+                
+                // 첫 메시지이면서 텍스트가 있는 경우 세션 제목으로 설정
+                if (isFirstMessage && messageText) {
+                    // 메시지 내용이 너무 길면 자르고 ... 추가
+                    let sessionTitle = messageText.length > 30 ? messageText.substring(0, 27) + '...' : messageText;
+                    
+                    // 로컬 스토리지 업데이트
+                    ChatSessionManager.updateSession(currentSessionId, { title: sessionTitle });
+                    
+                    // 서버에 세션 제목 업데이트
+                    $.ajax({
+                        url: `${appRootPath}/api/chat/session/${currentSessionId}`,
+                        method: 'PUT', 
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            session_title: sessionTitle
+                        }),
+                        success: function(response) {
+                            console.log('첫 메시지 기반 세션 제목 업데이트 성공:', response);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('첫 메시지 기반 세션 제목 업데이트 실패:', error);
+                        }
+                    });
+                }
+            } else {
+                console.error("Error: chat_session_id not found in localStorage. Cannot send message.");
+                $('#' + loadingMessageId).remove();
+                addMessage("오류: 채팅 세션을 시작할 수 없습니다. 페이지를 새로고침하거나 다시 시도해 주세요.", 'system-error'); 
+                return;
+            }
+            // --- 세션 ID 추가 끝 ---
+            
+            console.log("Sending payload:", payload); // image_data 포함 여부 확인 가능
+
+            $.ajax({
+                url: `${appRootPath}/api/chat`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function(data) {
+                    $('#' + loadingMessageId).remove();
+                    if (data.error) {
+                        // addMessage('assistant', `오류: ${data.error}`); // 이전 호출
+                        addMessage('assistant', `오류: ${data.error}`, new Date());
+                    } else {
+                        let responseText = "";
+                        if (data.type === 'text' && data.text) {
+                            responseText = data.text;
+                        } else if (typeof data === 'string') {
+                            responseText = data;
+                        } else {
+                            responseText = data;
+                        }
+                        // addMessage('assistant', responseText); // 이전 호출
+                        addMessage('assistant', responseText, new Date());
+                    }
+                    // 이미지 데이터 전송 후 임시 변수 초기화
+                    if (payload.image_data) {
+                        tempImageDataForNextMessage = null;
+                        console.log("첨부 이미지 전송 완료, 임시 데이터 초기화됨");
+                    }
+                },
+                error: function(xhr, status, error) {
+                    $('#' + loadingMessageId).remove();
+                    // addMessage('assistant', `채팅 응답 오류가 발생했습니다: ${error || status}`); // 이전 호출
+                    addMessage('assistant', `채팅 응답 오류가 발생했습니다: ${error || status}`, new Date());
+                    // 오류 발생 시에도 이미지 데이터는 초기화하는 것이 좋을 수 있음 (재전송 방지)
+                    if (payload.image_data) {
+                        tempImageDataForNextMessage = null;
+                        console.log("첨부 이미지 전송 오류, 임시 데이터 초기화됨");
+                    }
+                }
+            });
+        }
+
+        function addMessage(role, text, timestamp = null, image_data_url = null, messageId = null /*, an_options = null */) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageWrapper = document.createElement('div');
+            messageWrapper.classList.add('message-wrapper');
+
+            if (messageId) { // messageId가 있으면 wrapper에 ID 할당
+                messageWrapper.id = messageId;
+            }
+            
+            const validTimestamp = (timestamp && !isNaN(new Date(timestamp))) ? new Date(timestamp) : new Date();
+            const messageDate = validTimestamp.toLocaleDateString();
+            const messageTime = validTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+            if (lastMessageDate !== messageDate) {
+                const dateDivider = document.createElement('div');
+                dateDivider.classList.add('date-divider');
+                dateDivider.textContent = messageDate;
+                chatMessages.appendChild(dateDivider);
+                lastMessageDate = messageDate;
+            }
+
+            const messageContentWrapper = document.createElement('div');
+            messageContentWrapper.classList.add('message-content-wrapper');
+
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', role === 'user' ? 'user-message' : (role === 'assistant' ? 'assistant-message' : 'system-message'));
+
+            if (role === 'user') {
+                messageWrapper.classList.add('user-message-wrapper');
+                messageContentWrapper.classList.add('user-message-content-wrapper');
+
+                const timeSpan = document.createElement('span');
+                timeSpan.classList.add('message-time');
+                timeSpan.textContent = messageTime;
+                messageContentWrapper.appendChild(timeSpan); // 시간 먼저 추가 (CSS로 순서 변경)
+                
+                // 텍스트 메시지 처리
+                const textNode = document.createElement('div');
+                textNode.textContent = text;
+                messageDiv.appendChild(textNode);
+
+            } else if (role === 'assistant') {
+                messageWrapper.classList.add('assistant-message-wrapper');
+                // 어시스턴트 메시지는 시간 표시 없음 (필요시 추가 가능)
+                
+                // HTML 콘텐츠인지 확인 (typing indicator 등)
+                if (text.trim().startsWith('<div class="typing-indicator">')) {
+                    const markdownContent = document.createElement('div');
+                    markdownContent.classList.add('markdown-content');
+                    markdownContent.innerHTML = text; // HTML 그대로 삽입
+                    messageDiv.appendChild(markdownContent);
+                } else {
+                    // 일반 텍스트는 마크다운 처리
+                    const markdownContent = document.createElement('div');
+                    markdownContent.classList.add('markdown-content');
+                    markdownContent.innerHTML = DOMPurify.sanitize(marked.parse(text));
+                    messageDiv.appendChild(markdownContent);
+                }
+
+            } else { // system message
+                messageWrapper.classList.add('system-message-wrapper'); // 시스템 메시지도 정렬을 위해 추가
+                messageWrapper.style.alignItems = 'center'; // 시스템 메시지는 중앙 정렬 유지
+                const textNode = document.createElement('div');
+                // 시스템 메시지에 HTML 직접 삽입 허용 (이미지 미리보기 등)
+                if (text.startsWith('<img src="data:image')) {
+                    messageDiv.innerHTML = text; // Sanitize는 호출부에서 이미 되었다고 가정
+                } else {
+                    textNode.textContent = text;
+                    messageDiv.appendChild(textNode);
+                }
+            }
+
+            if (image_data_url && role === 'user') { // 사용자 메시지에 이미지가 있는 경우
+                const img = document.createElement('img');
+                img.src = image_data_url;
+                img.style.maxWidth = '200px';
+                img.style.maxHeight = '200px';
+                img.style.borderRadius = '10px';
+                img.style.marginTop = '10px';
+                messageDiv.appendChild(img); // 텍스트 아래에 이미지 추가
+            }
+            
+            if (role === 'system' && text.startsWith('<img src="data:image')) {
+                // 이미 위에서 messageDiv.innerHTML = text; 로 처리했으므로, 여기서는 messageDiv만 추가
+                messageContentWrapper.appendChild(messageDiv);
+            } else if (role !== 'system') { // 시스템 메시지가 아니면 일반적인 순서로 추가
+                messageContentWrapper.appendChild(messageDiv);
+            } else { // 일반 시스템 텍스트 메시지
+                messageContentWrapper.appendChild(messageDiv);
+            }
+
+
+            messageWrapper.appendChild(messageContentWrapper);
+            chatMessages.appendChild(messageWrapper);
+            
+            // 스크롤 함수 호출
+            setTimeout(function() {
+                scrollToBottom();
+            }, 0);
+        }
+
+        function formatJsonResult(data) { return `<pre>${JSON.stringify(data, null, 2)}</pre>`; }
+        function removeJsonComments(jsonString) {
+            if (typeof jsonString !== 'string') return jsonString;
+            let result = jsonString.replace(/\/\/.*$/gm, '');
+            return result.replace(/\/\*[\s\S]*?\*\//g, '');
+        }
+        function showNotification(message) {
+            const notification = $('<div>').addClass('notification').text(message);
+            $('body').append(notification);
+            setTimeout(() => { notification.addClass('fade-out'); setTimeout(() => notification.remove(), 500); }, 2000);
+        }
+        $.ajaxSetup({ beforeSend: null, complete: null });
+
+        // --- 세션 관리 함수 ---
+        
+        // 대화 세션 관리를 위한 객체
+        const ChatSessionManager = {
+            // 모든 세션 ID 목록 저장
+            saveSessionList: function(sessionIds) {
+                localStorage.setItem('chat_session_list', JSON.stringify(sessionIds));
+            },
+            
+            // 저장된 세션 목록 로드
+            getSessionList: function() {
+                const list = localStorage.getItem('chat_session_list');
+                return list ? JSON.parse(list) : [];
+            },
+            
+            // 새 세션을 목록에 추가
+            addSession: function(sessionId, title = null) {
+                const sessions = this.getSessionList();
+                
+                // 이미 존재하는 세션이면 추가하지 않음
+                if (sessions.some(s => s.id === sessionId)) {
+                    return false;
+                }
+                
+                // 세션 메타데이터 저장
+                const sessionMeta = {
+                    id: sessionId,
+                    title: title || '새 대화',
+                    createdAt: new Date().toISOString(),
+                    lastUsedAt: new Date().toISOString()
+                };
+                
+                // 세션 메타데이터 저장
+                localStorage.setItem(`chat_session_meta_${sessionId}`, JSON.stringify(sessionMeta));
+                
+                // 세션 목록에 추가
+                sessions.push(sessionMeta);
+                this.saveSessionList(sessions);
+                
+                return true;
+            },
+            
+            // 세션 메타데이터 업데이트
+            updateSession: function(sessionId, updates) {
+                const metaKey = `chat_session_meta_${sessionId}`;
+                const sessionMeta = JSON.parse(localStorage.getItem(metaKey) || '{}');
+                
+                // 업데이트 적용
+                const updatedMeta = { ...sessionMeta, ...updates };
+                localStorage.setItem(metaKey, JSON.stringify(updatedMeta));
+                
+                // 세션 목록도 업데이트
+                const sessions = this.getSessionList();
+                const index = sessions.findIndex(s => s.id === sessionId);
+                if (index !== -1) {
+                    sessions[index] = updatedMeta;
+                    this.saveSessionList(sessions);
+                }
+                
+                return updatedMeta;
+            },
+            
+            // 세션 정보 조회
+            getSessionInfo: function(sessionId) {
+                const metaKey = `chat_session_meta_${sessionId}`;
+                return JSON.parse(localStorage.getItem(metaKey) || '{}');
+            },
+            
+            // 세션 삭제
+            deleteSession: function(sessionId) {
+                // 세션 메타데이터 삭제
+                localStorage.removeItem(`chat_session_meta_${sessionId}`);
+                
+                // 세션 목록에서 제거
+                const sessions = this.getSessionList().filter(s => s.id !== sessionId);
+                this.saveSessionList(sessions);
+                
+                return true;
+            },
+            
+            // 현재 세션 ID 저장 (기존 chat_session_id 활용)
+            setCurrentSession: function(sessionId) {
+                localStorage.setItem('chat_session_id', sessionId);
+            },
+            
+            // 현재 세션 ID 조회
+            getCurrentSession: function() {
+                return localStorage.getItem('chat_session_id');
+            },
+            
+            // 세션 사용 시간 업데이트
+            updateSessionUsageTime: function(sessionId) {
+                return this.updateSession(sessionId, { lastUsedAt: new Date().toISOString() });
+            }
+        };
+        
+        // 대화 목록 팝업 열기
+        function openChatListPopup() {
+            // 세션 목록 로드 및 표시
+            loadSessionList();
+            
+            // 팝업 표시
+            $('#chatListPopup').show();
+        }
+        
+        // 세션 목록 로드 및 UI 업데이트
+        function loadSessionList() {
+            const sessionList = ChatSessionManager.getSessionList();
+            const currentSessionId = ChatSessionManager.getCurrentSession();
+            const $listContainer = $('#chatSessionList');
+            const $emptyMessage = $('.empty-list-message');
+            
+            // 목록 초기화
+            $listContainer.empty();
+            
+            if (sessionList.length === 0) {
+                $emptyMessage.show();
+                $listContainer.hide();
+                return;
+            }
+            
+            $emptyMessage.hide();
+            $listContainer.show();
+            
+            // 세션을 최근 사용 순으로 정렬
+            sessionList.sort((a, b) => {
+                const dateA = new Date(a.lastUsedAt || a.createdAt);
+                const dateB = new Date(b.lastUsedAt || b.createdAt);
+                return dateB - dateA; // 최신 항목이 위로
+            });
+            
+            // 세션 목록 UI 생성
+            sessionList.forEach(session => {
+                const isActive = session.id === currentSessionId;
+                
+                const $listItem = $('<li>').addClass('chat-session-item').attr('data-session-id', session.id);
+                if (isActive) {
+                    $listItem.addClass('active');
+                }
+                
+                // 세션 정보 영역 (클릭하면 해당 세션으로 전환)
+                const $info = $('<div>').addClass('chat-session-info').on('click', function() {
+                    if (!isActive) {
+                        switchToSession(session.id);
+                    }
+                });
+                
+                // 세션 제목 및 날짜 표시
+                const $title = $('<div>').addClass('chat-session-title').text(session.title);
+                const createdDate = new Date(session.createdAt).toLocaleDateString();
+                const $date = $('<div>').addClass('chat-session-date').text(createdDate);
+                
+                $info.append($title, $date);
+                
+                // 세션 액션 영역 (편집, 삭제 버튼)
+                const $actions = $('<div>').addClass('chat-session-actions');
+                
+                // 편집 버튼
+                const $editBtn = $('<button>')
+                    .addClass('chat-session-action-btn edit-btn')
+                    .attr('title', '이름 변경')
+                    .html('<i class="fas fa-edit"></i>')
+                    .on('click', function(e) {
+                        e.stopPropagation();
+                        showSessionEditForm(session.id, $listItem);
+                    });
+                
+                // 삭제 버튼
+                const $deleteBtn = $('<button>')
+                    .addClass('chat-session-action-btn delete-btn')
+                    .attr('title', '삭제')
+                    .html('<i class="fas fa-trash-alt"></i>')
+                    .on('click', function(e) {
+                        e.stopPropagation();
+                        if (confirm(`'${session.title}' 대화를 삭제하시겠습니까?`)) {
+                            deleteSession(session.id);
+                        }
+                    });
+                
+                $actions.append($editBtn, $deleteBtn);
+                
+                // 목록 아이템 조합
+                $listItem.append($info, $actions);
+                $listContainer.append($listItem);
+            });
+        }
+        
+        // 세션 이름 편집 폼 표시
+        function showSessionEditForm(sessionId, $listItem) {
+            const session = ChatSessionManager.getSessionInfo(sessionId);
+            const $info = $listItem.find('.chat-session-info');
+            
+            // 기존 내용 백업
+            const originalContent = $info.html();
+            
+            // 편집 폼 생성
+            const $form = $('<div>').addClass('session-edit-form');
+            const $input = $('<input>')
+                .addClass('session-edit-input')
+                .attr('type', 'text')
+                .attr('placeholder', '대화 이름 입력')
+                .val(session.title);
+            
+            const $saveBtn = $('<button>')
+                .addClass('session-edit-btn')
+                .text('저장')
+                .on('click', function() {
+                    const newTitle = $input.val().trim();
+                    if (newTitle) {
+                        updateSessionTitle(sessionId, newTitle);
+                        $info.html(originalContent);
+                        $listItem.find('.chat-session-title').text(newTitle);
+                    }
+                });
+            
+            const $cancelBtn = $('<button>')
+                .addClass('session-cancel-btn')
+                .text('취소')
+                .on('click', function() {
+                    $info.html(originalContent);
+                });
+            
+            $form.append($input, $saveBtn, $cancelBtn);
+            
+            // 원래 내용 대신 폼으로 교체
+            $info.empty().append($form);
+            $input.focus();
+        }
+        
+        // 세션 이름 업데이트
+        function updateSessionTitle(sessionId, newTitle) {
+            // 로컬 스토리지 업데이트
+            ChatSessionManager.updateSession(sessionId, { title: newTitle });
+            
+            $.ajax({
+                url: `${appRootPath}/api/chat/session/${sessionId}`,
+                method: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    session_title: newTitle
+                }),
+                success: function(response) {
+                    console.log('세션 제목 업데이트 성공:', response);
+                },
+                error: function(xhr, status, error) {
+                    console.error('세션 제목 업데이트 실패:', error);
+                    // 실패 시에도 UI는 이미 업데이트되었으므로 사용자에게 알림 메시지 표시
+                    showNotification('세션 제목 저장 실패. 다시 시도해주세요.');
+                }
+            });
+        }
+        
+        // 세션 전환
+        function switchToSession(sessionId) {
+            const currentSessionId = ChatSessionManager.getCurrentSession();
+            
+            // 이미 현재 세션이면 무시
+            if (sessionId === currentSessionId) {
+                return;
+            }
+            
+            // 세션 ID 저장
+            ChatSessionManager.setCurrentSession(sessionId);
+            
+            // 사용 시간 업데이트
+            ChatSessionManager.updateSessionUsageTime(sessionId);
+            
+            // 페이지 새로고침
+            location.reload();
+        }
+        
+        // 세션 삭제
+        function deleteSession(sessionId) {
+            const currentSessionId = ChatSessionManager.getCurrentSession();
+            const isCurrentSession = sessionId === currentSessionId;
+            
+            // 로컬 스토리지에서 세션 삭제
+            ChatSessionManager.deleteSession(sessionId);
+            
+            $.ajax({
+                url: `${appRootPath}/api/chat/session/${sessionId}`,
+                method: 'DELETE',
+                contentType: 'application/json',
+                success: function(response) {
+                    console.log('세션 삭제 성공:', response);
+                },
+                error: function(xhr, status, error) {
+                    console.error('세션 삭제 실패:', error);
+                    showNotification('세션 삭제 중 오류가 발생했습니다.');
+                }
+            });
+            
+            // 현재 세션인 경우, 다른 세션으로 전환 또는 새 세션 생성
+            if (isCurrentSession) {
+                const sessions = ChatSessionManager.getSessionList();
+                if (sessions.length > 0) {
+                    // 다른 세션으로 전환
+                    switchToSession(sessions[0].id);
+                } else {
+                    // 새 세션 생성 후 페이지 새로고침
+                    startNewChat();
+                    location.reload();
+                }
+            } else {
+                // 목록 다시 로드
+                loadSessionList();
+            }
+        }
+
+        // 기존 startNewChat 함수 수정
+        function startNewChat() {
+            // 새 세션 ID 생성 (UUID v4 형식)
+            function generateUUID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
+            
+            // 새 세션 ID 생성 및 저장
+            const newSessionId = generateUUID();
+            localStorage.setItem('chat_session_id', newSessionId);
+            
+            // 세션 관리자에 추가
+            ChatSessionManager.addSession(newSessionId);
+            
+            $.ajax({
+                url: `${appRootPath}/api/chat/session`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    session_id: newSessionId,
+                    session_title: '새 대화'
+                }),
+                success: function(response) {
+                    console.log('세션 메타데이터 저장 성공:', response);
+                },
+                error: function(xhr, status, error) {
+                    console.error('세션 메타데이터 저장 실패:', error);
+                }
+            });
+            
+            // 채팅 메시지 영역 초기화
+            $('#chatMessages').empty();
+            
+            // 변수 초기화
+            conversationHistory = [];
+            lastMessageDate = null;
+            tempImageDataForNextMessage = null;
+            
+            // 시작 메시지 표시
+            addMessage('system', '새 대화가 시작되었습니다.', new Date());
+            
+            // 알림 표시 (선택사항)
+            //showNotification('새 채팅이 시작되었습니다');
+            
+            console.log('새 채팅 시작됨 - 세션 ID:', newSessionId);
+            
+            // 대화 목록 팝업 닫기
+            $('#chatListPopup').hide();
+        }
+
+        // --- AJAX Interception for debug_popup.html ---
+        (function() {
+            // debug_popup.html 에서 window.opener.debugPopupRef = window; 와 같이 설정될 변수
+            // let debugPopupWindow = null; // 직접 참조 대신 window.debugPopupRef 사용
+
+            function sendLogToDebugPopup(logData) {
+                const popup = window.debugPopupRef; // index.html에 debug_popup.html이 등록한 참조 사용
+                if (popup && !popup.closed && typeof popup.logAjaxFromOpener === 'function') {
+                    popup.logAjaxFromOpener(logData);
+                } else if (popup && !popup.closed) {
+                    // 함수가 없을 경우 postMessage 사용 (대안)
+                    // popup.postMessage({ type: 'ajaxLog', source: 'index.html', data: logData }, '*');
+                    console.warn("logAjaxFromOpener function not found in debug popup. Logging to console instead.");
+                    // console.log("AJAX Log (to send):", logData);
+                }
+            }
+
+            // --- XHR Interception (index.html) ---
+            if (typeof XMLHttpRequest !== 'undefined') {
+                const originalXhrOpen = XMLHttpRequest.prototype.open;
+                const originalXhrSend = XMLHttpRequest.prototype.send;
+
+                XMLHttpRequest.prototype.open = function(method, url) {
+                    this._method = method;
+                    this._url = url;
+                    originalXhrOpen.apply(this, arguments);
+                };
+
+                XMLHttpRequest.prototype.send = function(data) {
+                    sendLogToDebugPopup({
+                        source: 'index.html',
+                        type: 'xhr-request',
+                        method: this._method,
+                        url: this._url,
+                        data: data ? String(data).substring(0, 200) + (String(data).length > 200 ? '...' : '') : null
+                    });
+
+                    this.addEventListener('readystatechange', function() {
+                        if (this.readyState === 4) { // DONE
+                            let responsePreview = 'N/A';
+                            try {
+                                if (typeof this.responseText === 'string' && this.responseText.length > 0) {
+                                    responsePreview = this.responseText.substring(0, 200) + (this.responseText.length > 200 ? '...' : '');
+                                } else if (this.response) {
+                                    responsePreview = `[Response type: ${typeof this.response}, preview unavailable]`;
+                                }
+                            } catch (e) {
+                                responsePreview = '[Error accessing responseText]';
+                            }
+                            sendLogToDebugPopup({
+                                source: 'index.html',
+                                type: 'xhr-response',
+                                method: this._method,
+                                url: this._url,
+                                status: this.status,
+                                response: responsePreview
+                            });
+                        }
+                    });
+                    this.addEventListener('error', function () {
+                        sendLogToDebugPopup({
+                            source: 'index.html',
+                            type: 'xhr-error',
+                            method: this._method,
+                            url: this._url,
+                            error: 'Network Error'
+                        });
+                    });
+                    originalXhrSend.apply(this, arguments);
+                };
+            }
+
+            // --- Fetch Interception (index.html) ---
+            if (window.fetch) {
+                const originalFetch = window.fetch;
+                window.fetch = function() {
+                    const args = Array.from(arguments);
+                    let resource = args[0];
+                    let options = args[1] || {};
+                    let urlString;
+                    let method = options.method || 'GET';
+
+                    if (typeof resource === 'string') {
+                        urlString = resource;
+                    } else if (resource instanceof Request) {
+                        urlString = resource.url;
+                        method = resource.method;
+                    } else {
+                        urlString = String(resource);
+                    }
+                    let bodyPreview = 'N/A';
+                    if (options.body) {
+                        bodyPreview = String(options.body).substring(0, 200) + (String(options.body).length > 200 ? '...' : '');
+                    }
+
+                    sendLogToDebugPopup({
+                        source: 'index.html',
+                        type: 'fetch-request',
+                        method: method,
+                        url: urlString,
+                        data: bodyPreview
+                    });
+
+                    return originalFetch.apply(this, args)
+                        .then(response => {
+                            const clonedResponse = response.clone();
+                            const originalUrl = response.url; // Use response.url as it's the final URL after redirects
+
+                            clonedResponse.text().then(textData => {
+                                sendLogToDebugPopup({
+                                    source: 'index.html',
+                                    type: 'fetch-response',
+                                    method: method, // original method
+                                    url: originalUrl, // final URL
+                                    status: response.status,
+                                    response: textData.substring(0, 200) + (textData.length > 200 ? '...' : '')
+                                });
+                            }).catch((err) => {
+                                sendLogToDebugPopup({
+                                    source: 'index.html',
+                                    type: 'fetch-response-read-error',
+                                    method: method,
+                                    url: originalUrl,
+                                    status: response.status,
+                                    error: `Error reading response body: ${err}`
+                                });
+                            });
+                            return response;
+                        })
+                        .catch(error => {
+                            sendLogToDebugPopup({
+                                source: 'index.html',
+                                type: 'fetch-error',
+                                method: method,
+                                url: urlString, // Initial URL for error context
+                                error: String(error)
+                            });
+                            throw error;
+                        });
+                };
+            }
+            console.log("AJAX interception for debug_popup.html initialized in index.html.");
+        })();
+
+        // 이미지 파일 업로드 처리 함수
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const imageDataUrl = e.target.result;
+                    console.log("이미지 파일 선택됨 (Data URL):");
+                    // 시스템 메시지로 첨부된 이미지 미리보기 보여주는 것은 유지
+                    // addMessage('system', `첨부된 이미지: <img src="${imageDataUrl}" alt="첨부 이미지" style="max-width: 300px; max-height: 200px; display: block; margin-top: 5px; border-radius: 8px;">`); // 이전 호출
+                    addMessage('system', `첨부된 이미지: <img src="${imageDataUrl}" alt="첨부 이미지" style="max-width: 300px; max-height: 200px; display: block; margin-top: 5px; border-radius: 8px;">`, new Date(), imageDataUrl);
+                    
+                    tempImageDataForNextMessage = imageDataUrl; // 임시 변수에 저장
+                }
+                reader.readAsDataURL(file);
+            } else if (file) {
+                console.warn("선택된 파일이 이미지가 아닙니다:", file.name, file.type);
+                // addMessage('system', "이미지 파일만 첨부할 수 있습니다. (예: PNG, JPG, GIF)"); // 이전 호출
+                addMessage('system', "이미지 파일만 첨부할 수 있습니다. (예: PNG, JPG, GIF)", new Date());
+                tempImageDataForNextMessage = null; // 이미지 아니면 초기화
+            }
+            $(event.target).val(''); // 파일 입력 초기화
+        }
+    </script>
+    
+    <!-- 대화 목록 레이어 팝업 -->
+    <div id="chatListPopup" class="popup-overlay" style="display: none;">
+        <div class="popup-content">
+            <div class="popup-header">
+                <h3>대화 목록</h3>
+                <button class="close-popup" id="closeChatListPopup"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="popup-body">
+                <div class="empty-list-message" style="display: none; text-align: center; padding: 20px; color: #666;">
+                    저장된 대화가 없습니다.
+                </div>
+                <ul id="chatSessionList" class="chat-session-list">
+                    <!-- 대화 목록 아이템이 여기에 동적으로 추가됩니다 -->
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

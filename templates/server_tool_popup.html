@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>서버 및 도구 관리</title>
+    <link rel="stylesheet" href="static/styles.css"> <!-- Main styles (adjust path if needed) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        /* Styles specifically for the popup window */
+        /* body 스타일은 static/styles.css의 body.popup 에서 제어 */
+        /* h2 스타일 일부는 static/styles.css의 .popup h2 에서 제어 */
+        /* .panel 스타일은 static/styles.css의 .popup .panel 에서 제어 */
+        
+        .popup-content {
+            display: flex;
+            flex: 1; /* Fill available height */
+            gap: 15px;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        .panel {
+            flex: 1;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevent panel overflow */
+        }
+        .panel-content {
+            flex: 1;
+            overflow-y: auto; /* Enable scrolling within panels */
+            position: relative; /* Needed for loading overlay */
+        }
+
+        /* --- Styles migrated from index.html --- */
+        /* 토글 스위치 스타일 - static/styles.css에서 .popup .slider 등으로 제어 */
+        /* .switch, .slider 등은 필요시 여기서 미세 조정 가능하나, 기본은 CSS 따름 */
+
+        .server-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 5px; 
+        }
+        .server-name {
+            font-weight: bold;
+            /* color 는 .popup .server-item 에서 상속받거나 여기서 지정 */
+        }
+
+        /* 로딩 오버레이 스타일 - static/styles.css 에서 .popup .loading-overlay 등으로 제어 */
+        /* .loading-overlay, .loading-spinner, .loading-text, @keyframes spin 등은 CSS 따름 */
+
+        /* 서버/툴 목록 아이템 스타일 - static/styles.css 에서 .popup .server-item 등으로 제어 */
+        /* .server-item, .tool-item 등의 배경색, 테두리색, 글자색은 CSS 따름 */
+        .server-item:last-child, .tool-item:last-child {
+            border-bottom: none; /* 유지 */
+        }
+        /* .server-item:hover, .server-item.active 등은 CSS 따름 */
+
+        .server-tools {
+            /* font-size: 0.9em; - 유지 또는 CSS에서 조정 */
+            /* color: #666; - 제거 (CSS에서 제어) */
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        /* .delete-server-btn 등은 CSS 따름 */
+
+        /* 서버 추가 버튼 - static/styles.css 에서 .popup .add-server 등으로 제어 */
+        /* .add-server 의 색상, 배경색 등은 CSS 따름 */
+        .add-server {
+            /* border-top, margin-top, padding, text-align, cursor, font-weight 등은 유지하거나 CSS와 조율 */
+            padding: 15px 10px; /* 패딩값 유지 또는 CSS와 조율 */
+            text-align: center;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .server-add-btn i { margin-right: 5px; }
+
+        /* 툴 아이템 스타일 */
+        .tool-name { 
+            font-weight: bold; 
+            margin-bottom: 3px; 
+            /* color 는 .popup .tool-item 에서 상속받거나 여기서 지정 */
+        }
+        .tool-description { 
+            font-size: 0.9em; 
+            /* color: #555; - 제거 (CSS에서 제어) */
+            /* color 는 .popup .tool-item 에서 상속받거나 여기서 지정 */
+        }
+
+        /* 로딩 메시지 - static/styles.css 에서 .popup .loading 으로 제어 */
+        /* .loading 스타일은 CSS 따름 */
+
+        /* 모달 스타일 (Add Server) - static/styles.css 에서 .popup .modal-overlay 등으로 제어 */
+        /* .modal-overlay, .modal-content, .modal-header h3, .form-group, .form-group label, */
+        /* .form-group input, .modal-footer, .modal-btn, .btn-cancel, .btn-add 등은 CSS 따름 */
+        .form-group input {
+            width: 100%; /* 유지 */
+            /* padding, border, border-radius 등은 CSS에서 제어되지만, width는 여기서 유지 */
+            box-sizing: border-box; 
+        }
+
+        /* 알림 스타일 (기존 유지 또는 CSS로 이동 고려) */
+        .notification {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            /* background-color 는 static/styles.css .popup .notification 에서 제어 */
+            color: white; padding: 10px 20px;
+            border-radius: 5px; z-index: 1001; opacity: 1; transition: opacity 0.5s ease-out;
+        }
+        .notification.fade-out { opacity: 0; }
+
+    </style>
+</head>
+<body class="popup">
+    <div class="popup-content">
+        <div class="panel server-list-panel">
+            <h2>MCP 서버 목록</h2>
+            <div id="serverList" class="panel-content server-list-container">
+                <div class="loading">서버 목록 로딩 중...</div>
+            </div>
+        </div>
+
+        <div class="panel tool-list-panel">
+            <h2>사용 가능한 도구 목록</h2>
+            <div id="toolList" class="panel-content tool-list-container">
+                <div class="loading">서버를 선택하세요</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API 기본 URL - 메인 윈도우와 동일하게 설정
+        const BASE_PATH = window.opener && window.opener.BASE_PATH ? window.opener.BASE_PATH : (window.location.pathname.split('/')[1] === 'mcp-agent' ? '/mcp-agent' : '');
+        // console.log("Popup BASE_PATH:", BASE_PATH);
+
+        // 전역 변수
+        let selectedServer = null;
+
+        // 로딩 오버레이 표시/숨김 함수
+        function showLoading(containerSelector, message) {
+            const $container = $(containerSelector);
+            // Ensure the container has position relative or absolute
+            if ($container.css('position') === 'static') {
+                $container.css('position', 'relative');
+            }
+            // 기존 로딩 오버레이 제거
+            $container.find('.loading-overlay').remove();
+            // 새 로딩 오버레이 추가
+            const $overlay = $('<div>')
+                .addClass('loading-overlay')
+                .html(`<div class="loading-spinner"></div><div class="loading-text">${message || '로딩 중...'}</div>`);
+            $container.append($overlay);
+        }
+
+        function hideLoading(containerSelector) {
+            $(containerSelector).find('.loading-overlay').remove();
+        }
+
+        // jQuery가 로드된 후에 실행
+        $(document).ready(function() {
+            loadServers();
+
+            // 부모 페이지의 #contentDiv 확인
+            try {
+                if (window.parent && window.parent.document) {
+                    const parentContentDiv = window.parent.document.querySelector('#contentDiv');
+                    if (parentContentDiv) {
+                        console.log('부모 페이지의 #contentDiv 내용:', parentContentDiv);
+                    } else {
+                        console.log('부모 페이지에서 #contentDiv를 찾을 수 없습니다.');
+                    }
+                } else {
+                    console.log('부모 페이지에 접근할 수 없습니다.');
+                }
+            } catch (error) {
+                console.error('부모 페이지 접근 중 오류 발생:', error);
+            }
+        });
+
+        // 서버 목록 로드 함수
+        function loadServers() {
+            showLoading('#serverList', '서버 목록 로딩 중...');
+            $.ajax({
+                url: `${BASE_PATH}/api/servers`,
+                method: 'GET',
+                success: function(data) {
+                    hideLoading('#serverList');
+                    if (data.servers && data.servers.length > 0) {
+                        displayServers(data.servers);
+                    } else {
+                        $('#serverList').html('<div class="loading">사용 가능한 서버가 없습니다</div>');
+                        appendAddServerButton(); // 서버가 없어도 추가 버튼은 표시
+                    }
+                },
+                error: function(xhr, status, error) {
+                    hideLoading('#serverList');
+                    console.error('서버 목록 로드 중 오류 발생:', error);
+                    $('#serverList').html('<div class="loading">서버 목록을 불러올 수 없습니다</div>');
+                    appendAddServerButton(); // 오류 시에도 추가 버튼 표시
+                }
+            });
+        }
+
+        // 서버 목록 표시 함수
+        function displayServers(servers) {
+            const $serverList = $('#serverList');
+            $serverList.empty();
+
+            const previouslySelectedServerName = selectedServer ? selectedServer.name : null;
+            let newSelectedServer = null;
+
+            servers.forEach(server => {
+                const $serverItem = $('<div>')
+                    .addClass('server-item')
+                    .attr('data-server-name', server.name) // Add data attribute
+                    .html(`
+                        <div class="server-header">
+                            <div class="server-name">${server.name}</div>
+                            <label class="switch">
+                                <input type="checkbox" class="server-toggle" data-server-name="${server.name}" ${server.enabled !== false ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="server-tools">
+                            <small>사용 가능한 도구: ${server.tools ? server.tools.length : 0}개</small>
+                            <i class="far fa-trash-alt delete-server-btn" data-server-name="${server.name}" title="서버 삭제"></i>
+                        </div>
+                    `);
+
+                if (previouslySelectedServerName === server.name && server.enabled !== false) {
+                    newSelectedServer = server;
+                    $serverItem.addClass('active');
+                }
+
+                // 서버 아이템 클릭 시 (토글/삭제 버튼 제외)
+                $serverItem.on('click', function(e) {
+                    if ($(e.target).hasClass('slider') ||
+                        $(e.target).hasClass('server-toggle') ||
+                        $(e.target).hasClass('delete-server-btn') ||
+                        $(e.target).parent().hasClass('delete-server-btn') ) {
+                        return; // Prevent selecting when clicking controls
+                    }
+
+                     // Check if the clicked server is enabled
+                    const serverName = $(this).data('server-name');
+                    const serverData = servers.find(s => s.name === serverName);
+                    if (serverData && serverData.enabled === false) {
+                        showNotification(`서버 '${serverName}'은(는) 비활성화 상태입니다.`);
+                        return; // Do not select disabled servers
+                    }
+
+
+                    $('.server-item.active').removeClass('active');
+                    $(this).addClass('active');
+                    selectedServer = serverData; // Use the found server data
+
+                    showLoading('#toolList', '도구구 목록 로딩 중...');
+                    setTimeout(() => {
+                        if (selectedServer && selectedServer.enabled !== false) {
+                            displayTools(selectedServer.tools);
+                        } else {
+                            $('#toolList').html('<div class="loading">활성화된 서버를 선택하세요</div>');
+                        }
+                        hideLoading('#toolList');
+                    }, 300); // Short delay for visual feedback
+                });
+
+                $serverList.append($serverItem);
+            });
+
+            // Restore selection and display tools if applicable
+            if (newSelectedServer) {
+                selectedServer = newSelectedServer;
+                displayTools(newSelectedServer.tools);
+            } else {
+                $('#toolList').html('<div class="loading">서버를 선택하세요</div>');
+                selectedServer = null; // Clear selection if previous wasn't found or enabled
+            }
+
+            // 서버 토글 이벤트 핸들러
+            $('.server-toggle').on('change', function(e) {
+                e.stopPropagation();
+                const serverName = $(this).data('server-name');
+                const enabled = $(this).prop('checked');
+                $(this).prop('disabled', true);
+                const serverItem = $(`.server-item[data-server-name="${serverName}"]`);
+                showLoading(serverItem, `${enabled ? '활성화' : '비활성화'} 중...`);
+                toggleServerStatus(serverName, enabled, this, serverItem);
+            });
+
+            // 서버 삭제 버튼 이벤트 핸들러
+            $('.delete-server-btn').on('click', function(e) {
+                e.stopPropagation();
+                const serverName = $(this).data('server-name');
+                if (confirm(`정말로 서버 '${serverName}'를 삭제하시겠습니까?`)) {
+                    deleteServer(serverName);
+                }
+            });
+
+            appendAddServerButton(); // Add the button at the end
+        }
+
+        // 서버 추가 버튼 추가 함수
+        function appendAddServerButton() {
+            const $serverList = $('#serverList');
+            // Remove existing button first to avoid duplicates
+            $serverList.find('.add-server').remove();
+            const $addServerButton = $('<div>')
+                .addClass('server-item add-server')
+                .html(`<div class="server-add-btn"><i class="fas fa-plus"></i><span>새 서버 추가</span></div>`)
+                .on('click', showAddServerDialog);
+            $serverList.append($addServerButton);
+        }
+
+        // 서버 상태 토글 함수
+        function toggleServerStatus(serverName, enabled, toggleElement, loadingContainer) {
+            $.ajax({
+                url: `${BASE_PATH}/api/servers/toggle`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ name: serverName, enabled: enabled }),
+                success: function(response) {
+                    hideLoading(loadingContainer);
+                    $(toggleElement).prop('disabled', false);
+                    if (response.success) {
+                        showNotification(`서버 '${serverName}'가 ${enabled ? '활성화' : '비활성화'} 되었습니다.`);
+                        // Update the server item's state visually if needed
+                        const serverItem = $(`.server-item[data-server-name="${serverName}"]`);
+                        if (!enabled) {
+                            serverItem.removeClass('active'); // Deactivate if disabling
+                            // If this was the selected server, clear the tool list
+                            if (selectedServer && selectedServer.name === serverName) {
+                                $('#toolList').html('<div class="loading">서버가 비활성화되었습니다</div>');
+                                selectedServer = null;
+                            }
+                        } else {
+                             // Optionally re-select if it was selected before disabling
+                            // loadServers(); // Reloading might be simpler
+                        }
+                         loadServers(); // Reload the list to reflect changes accurately
+                    } else {
+                        showNotification(`오류: ${response.error}`);
+                        $(toggleElement).prop('checked', !enabled); // Revert toggle
+                    }
+                },
+                error: function(xhr, status, error) {
+                    hideLoading(loadingContainer);
+                    $(toggleElement).prop('disabled', false);
+                    console.error('서버 상태 변경 중 오류 발생:', error);
+                    showNotification('서버 상태를 변경할 수 없습니다');
+                    $(toggleElement).prop('checked', !enabled); // Revert toggle
+                }
+            });
+        }
+
+        // 서버 삭제 함수
+        function deleteServer(serverName) {
+            const serverItem = $(`.server-item[data-server-name="${serverName}"]`);
+            showLoading(serverItem, `서버 '${serverName}' 삭제 중...`);
+            $.ajax({
+                url: `${BASE_PATH}/api/servers/delete`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ name: serverName }),
+                success: function(response) {
+                    hideLoading(serverItem);
+                    if (response.success) {
+                        showNotification(`서버 '${serverName}'가 삭제되었습니다.`);
+                        // If this was the selected server, clear the tool list
+                        if (selectedServer && selectedServer.name === serverName) {
+                            $('#toolList').html('<div class="loading">서버를 선택하세요</div>');
+                            selectedServer = null;
+                        }
+                        loadServers(); // Reload the list
+                    } else {
+                        showNotification(`오류: ${response.error}`);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    hideLoading(serverItem);
+                    console.error('서버 삭제 중 오류 발생:', error);
+                    showNotification('서버를 삭제할 수 없습니다');
+                }
+            });
+        }
+
+        // 도구 목록 표시 함수
+        function displayTools(tools) {
+            const $toolList = $('#toolList');
+            $toolList.empty();
+            if (tools && tools.length > 0) {
+                tools.forEach(tool => {
+                    // Args 정보를 제외한 툴 정보만 표시
+                    const toolInfo = {
+                        name: tool.name,
+                        description: tool.description.split('Args:')[0] || '설명 없음'
+                    };
+                    
+                    const $toolItem = $('<div>')
+                        .addClass('tool-item')
+                        .html(`
+                            <div class="tool-name">${toolInfo.name}</div>
+                            <div class="tool-description">${toolInfo.description}</div>
+                        `);
+                    $toolList.append($toolItem);
+                });
+            } else {
+                $toolList.html('<div class="loading">사용 가능한 도구가 없습니다</div>');
+            }
+        }
+
+        // 서버 추가 다이얼로그 표시
+        function showAddServerDialog() {
+            // Prevent multiple dialogs
+            if ($('.modal-overlay').length > 0) return;
+
+            const dialog = $('<div>')
+                .addClass('modal-overlay')
+                .html(`
+                    <div class="modal-content">
+                        <div class="modal-header"><h3>새 서버 추가</h3></div>
+                        <div class="form-group">
+                            <label for="serverName">서버 이름</label>
+                            <input type="text" id="serverName" placeholder="예: TADS 서버" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="serverUrl">서버 URL</label>
+                            <input type="text" id="serverUrl" placeholder="예: http://localhost:8000" autocomplete="off">
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-btn btn-cancel">취소</button>
+                            <button class="modal-btn btn-add"><i class="fas fa-plus"></i> 서버 추가</button>
+                        </div>
+                    </div>
+                `);
+            dialog.on('click', function(e) { if ($(e.target).hasClass('modal-overlay')) dialog.remove(); });
+            $(document).on('keydown.modal', function(e) { if (e.key === 'Escape') dialog.remove(); }); // Use namespaced event
+            dialog.find('.btn-cancel').on('click', () => { dialog.remove(); $(document).off('keydown.modal'); });
+            dialog.find('.btn-add').on('click', () => { addNewServer(dialog); });
+            dialog.find('input').on('keypress', function(e) { if (e.key === 'Enter') addNewServer(dialog); });
+            $('body').append(dialog);
+            dialog.find('#serverName').focus();
+        }
+
+        // 새 서버 추가
+        async function addNewServer(dialog) {
+            const name = $('#serverName').val().trim();
+            const url = $('#serverUrl').val().trim();
+            const nameInput = $('#serverName');
+            const urlInput = $('#serverUrl');
+            let hasError = false;
+            nameInput.css('border-color', !name ? '#dc3545' : '#ccc');
+            urlInput.css('border-color', !url ? '#dc3545' : '#ccc');
+            if (!name || !url) return;
+
+            const addButton = dialog.find('.btn-add');
+            const originalText = addButton.html();
+            addButton.html('<i class="fas fa-spinner fa-spin"></i> 처리 중...').prop('disabled', true);
+            dialog.find('.btn-cancel').prop('disabled', true);
+
+            try {
+                const response = await $.ajax({
+                    url: `${BASE_PATH}/api/servers/add`,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ name, url })
+                });
+                if (response.success) {
+                    dialog.remove();
+                    $(document).off('keydown.modal'); // Clean up keydown listener
+                    showNotification('서버가 성공적으로 추가되었습니다.');
+                    loadServers();
+                } else {
+                    alert('서버 추가 실패: ' + response.error);
+                    addButton.html(originalText).prop('disabled', false);
+                    dialog.find('.btn-cancel').prop('disabled', false);
+                }
+            } catch (error) {
+                console.error("Add server error:", error);
+                alert('서버 추가 중 오류 발생: ' + (error.responseJSON?.error || error.statusText || error.message));
+                addButton.html(originalText).prop('disabled', false);
+                dialog.find('.btn-cancel').prop('disabled', false);
+            }
+        }
+
+        // 알림 메시지 표시 함수
+        function showNotification(message) {
+            // Remove existing notifications first
+            $('.notification').remove();
+            const notification = $('<div>').addClass('notification').text(message);
+            $('body').append(notification);
+            setTimeout(() => {
+                notification.addClass('fade-out');
+                setTimeout(() => notification.remove(), 500);
+            }, 2000);
+        }
+
+    </script>
+</body>
+</html> 

@@ -1,0 +1,9 @@
+{
+  "servers": [
+    {
+      "name": "CONSOLE MCP",
+      "url": "https://cads2-backoffice-test.withhive.com",
+      "enabled": true
+    }
+  ]
+}
